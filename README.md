@@ -3,7 +3,7 @@ Ubuntu-optimize4vdi is a simple Ansible playbook which performs basic configurat
 
 How to use
 ==========
-1. Install Ubuntu 22.04 Guest OS on the virtual desktop VM with default parameters. Set the default user account with 'user' as username and sudoer permissions.
+1. Install Ubuntu 22.04 Guest OS on the virtual desktop VM with default parameters. Set the default user account with 'user' as username and sudoer permissions. If you user another username, please modify configuration steps and ansible.cfg accordingly.
 2. Install OpenSSH server on the virtual desktop:
 ```
 sudo apt get install openssh-server
