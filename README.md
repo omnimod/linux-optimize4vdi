@@ -1,5 +1,5 @@
-# ubuntu-optimize4vdi
-Ubuntu-optimize4vdi is a simple Ansible playbook which performs basic configuration steps like updating OS, uninstalling/installing packages, setting GNOME desktop parameters, etc.
+# linux-optimize4vdi
+Linux-optimize4vdi is a simple Ansible playbook which performs basic configuration steps like updating OS, uninstalling/installing packages, setting GNOME desktop parameters, etc. Current version supports Ubuntu 22.04.
 
 How to use
 ==========
