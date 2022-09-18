@@ -1,0 +1,131 @@
+---
+
+- hosts: all
+  become: true
+
+# Pre Tasks
+
+  pre_tasks:
+
+  - name: Remove unnecessary apps
+    tags: always
+    apt:
+      state: absent
+      pkg:
+      - aisleriot
+      - gnome-mahjongg
+      - gnome-mines
+      - gnome-sudoku
+
+  - name: APT Update && Upgrade
+    tags: always
+    apt:
+      update_cache: yes
+      upgrade: 'yes'
+
+  - name: Update apps
+    tags: always
+    command: snap refresh
+
+  - name: Install new apps
+    tags: always
+    snap:
+      name:
+      - chromium
+      - notepad-plus-plus
+      - p7zip-desktop
+      - telegram-desktop
+      - vlc
+      - zoom-client
+
+  - name: Disable automatic updates
+    tags: always
+    replace:
+      path: /etc/apt/apt.conf.d/20auto-upgrades
+      regexp: '(^APT::Periodic::Update-Package-Lists \")1(\")'
+      replace: '\g<1>0\g<2>'
+
+  - name: Disable unattended upgrades
+    tags: always
+    replace:
+      path: /etc/apt/apt.conf.d/20auto-upgrades
+      regexp: '(^APT::Periodic::Unattended-Upgrade \")1(\")'
+      replace: '\g<1>0\g<2>'  
+
+# Tasks
+
+  tasks:
+  
+  - name: Enable GRUB quiet boot
+    tags: always
+    replace:
+      path: /etc/default/grub
+      regexp: '(^GRUB_CMDLINE_LINUX_DEFAULT=\").*(\")'
+      replace: '\g<1>quiet\g<2>'
+    register: grub_update
+
+  - name: Reload GRUB
+    tags: always
+    command: update-grub
+    when: grub_update.changed == True
+
+  - name: Disable hibernation and sleep
+    tags: always
+    command: systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
+  - name: Disable screen automatic screen brightness and automatic suspend
+    become: false
+    tags: always
+    shell: |
+      gsettings set org.gnome.settings-daemon.plugins.power ambient-enabled false
+      gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
+      gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+      gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'suspend'
+    register: profile_update
+
+  - name: Set desktop color and theme
+    become: false
+    tags: always
+    shell: |
+      gsettings set org.gnome.desktop.background picture-uri ''
+      gsettings set org.gnome.desktop.background primary-color '#0063B2'
+      gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-blue'      
+    register: profile_update
+
+# Post Tasks
+
+  post_tasks:
+  
+  - name: Create dconf directory to copy GNOME config 
+    tags: always
+    file:
+      path: /etc/skel/.config/dconf
+      state: directory
+      mode: '0700'      
+    when: profile_update.changed == True
+
+  - name: Copy GNOME config
+    tags: always
+    command: cp /home/{{ ansible_user }}/.config/dconf/user /etc/skel/.config/dconf/user
+    when: profile_update.changed == True
+
+  - name: Disable GNOME Welcome screen
+    tags: always
+    copy:
+      dest: /etc/skel/.config/gnome-initial-setup-done
+      mode: '0664'
+      content: |
+        yes
+    when: profile_update.changed == True
+
+#  - name: Create test user account
+#    user:
+#      name: test
+#      shell: /bin/bash
+#      password: '$6$zMBWwUkBVcgrre7j$G8ecTKBZ9kal1nox9Jagge8hE.U5IPOw0SiVyS.jGBdLZ78ZCyf83dLfbYPJK.us4r1lWR/VVefk5/86MyRQx.'
+#      groups: root
+
+
+
+
+
