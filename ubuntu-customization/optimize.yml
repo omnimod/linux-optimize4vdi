@@ -16,6 +16,10 @@
       - gnome-mahjongg
       - gnome-mines
       - gnome-sudoku
+      - usb-creator-common
+      - usb-creator-gtk
+      - transmission-common
+      - transmission-gtk
 
   - name: APT Update && Upgrade
     tags: always
@@ -69,11 +73,22 @@
     command: update-grub
     when: grub_update.changed == True
 
+  - name: Disable unnecessary services
+    tags: always
+    service:
+      name: "{{ item }}"
+      state: stopped
+      enabled: no
+    loop:
+    - bluetooth
+    - bolt
+    - fwupd
+
   - name: Disable hibernation and sleep
     tags: always
     command: systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
-  - name: Disable screen automatic screen brightness and automatic suspend
+  - name: Disable automatic screen brightness, animation, and suspend
     become: false
     tags: always
     shell: |
@@ -81,6 +96,7 @@
       gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
       gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
       gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'suspend'
+      gsettings set org.gnome.desktop.interface enable-animations 'false'
     register: profile_update
 
   - name: Set desktop color and theme
@@ -117,6 +133,14 @@
       content: |
         yes
     when: profile_update.changed == True
+
+  - name: Clear bash history
+    tags: always
+    shell: |
+      rm ~/.bash_history
+      echo 'history -c' >> ~/.bash_logout
+    args:
+      warn: false
 
 #  - name: Create test user account
 #    user:
