@@ -21,7 +21,7 @@
       - transmission-common
       - transmission-gtk
 
-  - name: APT Update && Upgrade
+  - name: Apt update && upgrade
     tags: always
     apt:
       update_cache: yes
@@ -31,12 +31,18 @@
     tags: always
     command: snap refresh
 
+  - name: Install Open-VM-Tools
+    tags: vsphere
+    apt:
+      state: latest
+      pkg:
+      - open-vm-tools-desktop
+
   - name: Install new apps
     tags: always
     snap:
       name:
       - chromium
-      - notepad-plus-plus
       - p7zip-desktop
       - telegram-desktop
       - vlc
@@ -56,10 +62,68 @@
       regexp: '(^APT::Periodic::Unattended-Upgrade \")1(\")'
       replace: '\g<1>0\g<2>'  
 
+  - name: Install apps for domain join
+    tags: domain
+    apt:
+     state: latest
+     pkg:
+     - sssd-ad
+     - sssd-tools
+     - realmd
+     - adcli
+     - krb5-user
+
+  - name: Copy Horizon Agent installer
+    tags: horizon
+    unarchive:
+      src: '{{ horizon_agent }}'
+      dest: /tmp/
+      extra_opts:
+      - --one-top-level=horizonagent
+      - --strip-components=1
+
+  - name: Copy VHCI Driver for USB redirection
+    tags: horizon
+    unarchive:
+      src: '{{ vhci_driver }}'
+      dest: /tmp
+      extra_opts:
+      - --one-top-level=vhci
+      - --strip-components=1
+
+  - name: Copy V4L2Loopback Driver for RTAV
+    tags: horizon
+    unarchive:
+      src: '{{ v4l2loopback_driver }}'
+      dest: /tmp
+      extra_opts:
+      - --one-top-level=v4l2loopback
+      - --strip-components=1
+
+  - name: Install make, gcc, libelf-dev, linux-headers
+    tags: horizon
+    apt:
+      name:
+      - make
+      - gcc
+      - libelf-dev
+      - linux-headers-{{ ansible_kernel }}
+      state: latest 
+
+  - name: Install packages for Horizon agent
+    tags: horizon
+    apt:
+      name:
+      - python
+      - python-dbus
+      - python-gobject
+    when: ansible_distribution_version == "18.04"
+
+
 # Tasks
 
   tasks:
-  
+
   - name: Enable GRUB quiet boot
     tags: always
     replace:
@@ -73,6 +137,10 @@
     command: update-grub
     when: grub_update.changed == True
 
+  - name: Disable hibernation and sleep
+    tags: always
+    command: systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
   - name: Disable unnecessary services
     tags: always
     service:
@@ -84,13 +152,81 @@
     - bolt
     - fwupd
 
-  - name: Disable hibernation and sleep
-    tags: always
-    command: systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+  - name: Join to domain
+    tags: domain
+    shell: |
+      echo "{{ domain_password }}" | realm join -U "{{ domain_user }}" "{{ domain_name }}"
+      pam-auth-update --enable mkhomedir
+
+  - name: Enable TKT rc4-hmac encryption for Ubuntu 18.04
+    tags: domain
+    lineinfile:
+      path: /etc/krb5.conf
+      line: default_tkt_enctypes = rc4-hmac
+      create: yes    
+    when: ansible_distribution_version == "18.04"
+
+  - name: Enable TGS rc4-hmac encryption for Ubuntu 18.04
+    tags: domain
+    lineinfile:
+      path: /etc/krb5.conf
+      line: default_tgs_enctypes = rc4-hmac
+      create: yes    
+    when: ansible_distribution_version == "18.04"
+
+  - name: Install VHCI driver
+    tags: horizon
+    shell: |
+      cd /tmp/vhci
+      patch -p1 < /tmp/horizonagent/resources/vhci/patch/vhci.patch
+      make clean && make && make install
+
+  - name: Install V4L2Loopback driver
+    tags: horizon
+    shell: |
+      cd /tmp/v4l2loopback
+      patch -p1 < /tmp/horizonagent/resources/v4l2loopback/v4l2loopback.patch
+      make clean && make && make install
+      make install-utils
+      depmod -A
+
+  - name: Override V4L2Loopback driver for Ubuntu 22.04
+    tags: horizon
+    lineinfile:
+      path: /etc/depmod.d/ubuntu.conf
+      line: override v4l2loopback * extra
+      create: yes    
+    when: ansible_distribution_version == "22.04"
+
+  - name: Regenerate modules.dep file
+    tags: horizon
+    shell: |
+      depmod -a
+    when: ansible_distribution_version == "22.04"
+
+  - name: Install Horizon Agent
+    tags: horizon
+    shell: |
+      cd /tmp/horizonagent
+      ./install_viewagent.sh -A yes -U yes -a yes -m yes --webcam
+    register: horizonagent_install
+
+  - name: Enable Horizon offline domain join
+    tags: domain
+    lineinfile:
+      path: /etc/vmware/viewagent-custom.conf
+      line: OfflineJoinDomain=sssd
+      create: yes
+    when: horizonagent_install.changed == True   
+
+
+# Post Tasks
+
+  post_tasks:
 
   - name: Disable automatic screen brightness, animation, and suspend
     become: false
-    tags: always
+    tags: gnome
     shell: |
       gsettings set org.gnome.settings-daemon.plugins.power ambient-enabled false
       gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
@@ -101,19 +237,15 @@
 
   - name: Set desktop color and theme
     become: false
-    tags: always
+    tags: gnome
     shell: |
       gsettings set org.gnome.desktop.background picture-uri ''
       gsettings set org.gnome.desktop.background primary-color '#0063B2'
       gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-blue'      
     register: profile_update
 
-# Post Tasks
-
-  post_tasks:
-  
   - name: Create dconf directory to copy GNOME config 
-    tags: always
+    tags: gnome
     file:
       path: /etc/skel/.config/dconf
       state: directory
@@ -121,12 +253,12 @@
     when: profile_update.changed == True
 
   - name: Copy GNOME config
-    tags: always
+    tags: gnome
     command: cp /home/{{ ansible_user }}/.config/dconf/user /etc/skel/.config/dconf/user
     when: profile_update.changed == True
 
   - name: Disable GNOME Welcome screen
-    tags: always
+    tags: gnome
     copy:
       dest: /etc/skel/.config/gnome-initial-setup-done
       mode: '0664'
@@ -141,6 +273,7 @@
       echo 'history -c' >> ~/.bash_logout
     args:
       warn: false
+
 
 #  - name: Create test user account
 #    user:

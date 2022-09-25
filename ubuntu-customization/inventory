@@ -1,3 +1,21 @@
 [ubuntu]
-192.168.1.192 
+192.168.1.35
 
+[ubuntu:vars]
+# Horizon agent installer archive filename
+horizon_agent=VMware-horizonagent-linux-x86_64-2206-8.6.0-20072671.tar.gz 
+
+# VHCI driver archive filename
+vhci_driver=vhci-hcd-1.15.tar.gz
+
+# V4L2Loopback driver archive filename (use 0.12.5, newer versions could be incompatible with Horizon Agent 2206)
+v4l2loopback_driver=v4l2loopback-0.12.5.tar.gz
+
+# Domain name to join
+domain_name=lab.internal
+
+# Username for domain join
+domain_user=administrator
+
+# User password for domain join
+domain_password=P@ssw0rd
