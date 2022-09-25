@@ -17,7 +17,7 @@ ssh-keygen
 ```
 ssh-copy-id -i ~/id_rsa.pub user@virtual_desktop_ip_address
 ```
-6. Modify inventory file and specify virtual desktop IP address or hostname.
+6. Modify inventory file and specify virtual desktop IP address and modify required variables.
 7. Download and place required installation packages and archives to the files folder.
 8. Run Ansible playbook with:
 ```
