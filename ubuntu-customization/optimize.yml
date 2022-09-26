@@ -162,16 +162,16 @@
     tags: domain
     lineinfile:
       path: /etc/krb5.conf
-      line: default_tkt_enctypes = rc4-hmac
-      create: yes    
+      line: 'default_tkt_enctypes = rc4-hmac'
+      create: yes
     when: ansible_distribution_version == "18.04"
 
   - name: Enable TGS rc4-hmac encryption for Ubuntu 18.04
     tags: domain
     lineinfile:
       path: /etc/krb5.conf
-      line: default_tgs_enctypes = rc4-hmac
-      create: yes    
+      line: 'default_tgs_enctypes = rc4-hmac'
+      create: yes
     when: ansible_distribution_version == "18.04"
 
   - name: Install VHCI driver
@@ -219,6 +219,27 @@
       create: yes
     when: horizonagent_install.changed == True   
 
+  - name: Enable SSO with Horizon
+    tags: horizon
+    lineinfile:
+      path: /etc/sssd/sssd.conf
+      line: 'ad_gpo_map_interactive = +gdm-vmwcred'
+      create: yes
+
+  - name: Deactivate GPO access control in the cloned VM
+    tags: horizon
+    lineinfile:
+      path: /etc/sssd/sssd.conf
+      line: 'ad_gpo_access_control = permissive'
+      create: yes
+
+  - name: Set Horizon SSO user format to domain\username
+    tags: horizon
+    lineinfile:
+      path: /etc/vmware/viewagent-custom.conf
+      line: 'SSOUserFormat=[domain]\\[username]'
+      create: yes
+
 
 # Post Tasks
 
@@ -249,7 +270,7 @@
     file:
       path: /etc/skel/.config/dconf
       state: directory
-      mode: '0700'      
+      mode: '0700'
     when: profile_update.changed == True
 
   - name: Copy GNOME config
@@ -274,6 +295,10 @@
     args:
       warn: false
 
+  - name: Reboot the host
+    tags: reboot
+    reboot:
+      reboot_timeout: 300
 
 #  - name: Create test user account
 #    user:
