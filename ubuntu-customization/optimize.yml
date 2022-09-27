@@ -209,15 +209,20 @@
     shell: |
       cd /tmp/horizonagent
       ./install_viewagent.sh -A yes -U yes -a yes -m yes --webcam
-    register: horizonagent_install
 
   - name: Enable Horizon offline domain join
-    tags: domain
+    tags: horizon
     lineinfile:
       path: /etc/vmware/viewagent-custom.conf
       line: OfflineJoinDomain=sssd
       create: yes
-    when: horizonagent_install.changed == True   
+
+  - name: Set Horizon SSO user format to domain\username
+    tags: horizon
+    lineinfile:
+      path: /etc/vmware/viewagent-custom.conf
+      line: 'SSOUserFormat=[domain]\\[username]'
+      create: yes
 
   - name: Enable SSO with Horizon
     tags: horizon
@@ -233,12 +238,12 @@
       line: 'ad_gpo_access_control = permissive'
       create: yes
 
-  - name: Set Horizon SSO user format to domain\username
-    tags: horizon
+  - name: Fix NSS and PAM services responder socker error during boot
+    tags: domain
     lineinfile:
-      path: /etc/vmware/viewagent-custom.conf
-      line: 'SSOUserFormat=[domain]\\[username]'
-      create: yes
+      path: /etc/sssd/sssd.conf
+      state: absent
+      line: 'services = nss, pam'
 
 
 # Post Tasks
@@ -287,7 +292,16 @@
         yes
     when: profile_update.changed == True
 
-  - name: Clear bash history
+  - name: Clear bash history for superuser account
+    tags: always
+    shell: |
+      rm ~/.bash_history
+      echo 'history -c' >> ~/.bash_logout
+    args:
+      warn: false
+
+  - name: Clear bash history for user account
+    become: false
     tags: always
     shell: |
       rm ~/.bash_history
@@ -299,15 +313,3 @@
     tags: reboot
     reboot:
       reboot_timeout: 300
-
-#  - name: Create test user account
-#    user:
-#      name: test
-#      shell: /bin/bash
-#      password: '$6$zMBWwUkBVcgrre7j$G8ecTKBZ9kal1nox9Jagge8hE.U5IPOw0SiVyS.jGBdLZ78ZCyf83dLfbYPJK.us4r1lWR/VVefk5/86MyRQx.'
-#      groups: root
-
-
-
-
-
