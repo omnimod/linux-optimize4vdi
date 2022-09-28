@@ -86,7 +86,7 @@
     tags: horizon
     unarchive:
       src: '{{ vhci_driver }}'
-      dest: /tmp
+      dest: /tmp/
       extra_opts:
       - --one-top-level=vhci
       - --strip-components=1
@@ -95,7 +95,7 @@
     tags: horizon
     unarchive:
       src: '{{ v4l2loopback_driver }}'
-      dest: /tmp
+      dest: /tmp/
       extra_opts:
       - --one-top-level=v4l2loopback
       - --strip-components=1
@@ -110,7 +110,7 @@
       - linux-headers-{{ ansible_kernel }}
       state: latest 
 
-  - name: Install packages for Horizon agent
+  - name: Install Horizon Agent pre-requirements for Ubuntu 18.04
     tags: horizon
     apt:
       name:
@@ -152,7 +152,7 @@
     - bolt
     - fwupd
 
-  - name: Join to domain
+  - name: Domain join
     tags: domain
     shell: |
       echo "{{ domain_password }}" | realm join -U "{{ domain_user }}" "{{ domain_name }}"
@@ -190,25 +190,27 @@
       make install-utils
       depmod -A
 
-  - name: Override V4L2Loopback driver for Ubuntu 22.04
+  - name: Override V4L2Loopback driver for Ubuntu 22.04 or 20.04
     tags: horizon
     lineinfile:
       path: /etc/depmod.d/ubuntu.conf
       line: override v4l2loopback * extra
       create: yes    
-    when: ansible_distribution_version == "22.04"
+    when: ansible_distribution_version in ["22.04", "20.04"]
 
   - name: Regenerate modules.dep file
     tags: horizon
     shell: |
       depmod -a
-    when: ansible_distribution_version == "22.04"
+      modprobe -r v4l2loopback
+      modprobe v4l2loopback
+    when: ansible_distribution_version in ["22.04", "20.04"]
 
   - name: Install Horizon Agent
     tags: horizon
     shell: |
       cd /tmp/horizonagent
-      ./install_viewagent.sh -A yes -U yes -a yes -m yes --webcam
+      ./install_viewagent.sh -A yes -U yes -a yes --webcam
 
   - name: Enable Horizon offline domain join
     tags: horizon
@@ -243,7 +245,8 @@
     lineinfile:
       path: /etc/sssd/sssd.conf
       state: absent
-      line: 'services = nss, pam'
+      regexp: '^services = nss, pam'
+    when: ansible_distribution_version in ["22.04", "20.04"]
 
 
 # Post Tasks
