@@ -20,4 +20,4 @@ domain_user=administrator
 # User password for domain join
 domain_password=P@ssw0rd
 
-debug = True
+debug = False
