@@ -20,16 +20,19 @@
       - usb-creator-gtk
       - transmission-common
       - transmission-gtk
+    register: apt_remove
 
   - name: Apt update && upgrade
     tags: always
     apt:
       update_cache: yes
       upgrade: 'yes'
+    register: apt_update
 
   - name: Update apps
     tags: always
     command: snap refresh
+    register: snap_refresh
 
   - name: Install Open-VM-Tools
     tags: vsphere
@@ -37,6 +40,7 @@
       state: latest
       pkg:
       - open-vm-tools-desktop
+    register: tools_install
 
   - name: Install new apps
     tags: always
@@ -47,20 +51,24 @@
       - telegram-desktop
       - vlc
       - zoom-client
+    register: apt_install
 
-  - name: Disable automatic updates
+  - name: Disable updates
     tags: always
-    replace:
-      path: /etc/apt/apt.conf.d/20auto-upgrades
-      regexp: '(^APT::Periodic::Update-Package-Lists \")1(\")'
-      replace: '\g<1>0\g<2>'
+    block:
+    - name: Disable automatic updates
+      replace:
+        path: /etc/apt/apt.conf.d/20auto-upgrades
+        regexp: '(^APT::Periodic::Update-Package-Lists \")1(\")'
+        replace: '\g<1>0\g<2>'
 
-  - name: Disable unattended upgrades
-    tags: always
-    replace:
-      path: /etc/apt/apt.conf.d/20auto-upgrades
-      regexp: '(^APT::Periodic::Unattended-Upgrade \")1(\")'
-      replace: '\g<1>0\g<2>'  
+    - name: Disable unattended upgrades
+      tags: always
+      replace:
+        path: /etc/apt/apt.conf.d/20auto-upgrades
+        regexp: '(^APT::Periodic::Unattended-Upgrade \")1(\")'
+        replace: '\g<1>0\g<2>'  
+      register: update_disable
 
   - name: Install apps for domain join
     tags: domain
@@ -72,6 +80,7 @@
      - realmd
      - adcli
      - krb5-user
+    register: apt_domjoin_install
 
   - name: Copy Horizon Agent installer
     tags: horizon
@@ -81,6 +90,7 @@
       extra_opts:
       - --one-top-level=horizonagent
       - --strip-components=1
+    register: horizonagent_copy
 
   - name: Copy VHCI Driver for USB redirection
     tags: horizon
@@ -90,6 +100,7 @@
       extra_opts:
       - --one-top-level=vhci
       - --strip-components=1
+    register: vhci_copy
 
   - name: Copy V4L2Loopback Driver for RTAV
     tags: horizon
@@ -99,6 +110,7 @@
       extra_opts:
       - --one-top-level=v4l2loopback
       - --strip-components=1
+    register: v4l2loopback_copy
 
   - name: Install make, gcc, libelf-dev, linux-headers
     tags: horizon
@@ -109,6 +121,7 @@
       - libelf-dev
       - linux-headers-{{ ansible_kernel }}
       state: latest 
+    register: gcc_install
 
   - name: Install Horizon Agent pre-requirements for Ubuntu 18.04
     tags: horizon
@@ -118,28 +131,31 @@
       - python-dbus
       - python-gobject
     when: ansible_distribution_version == "18.04"
-
+    register: horizonagent_prereq_install
 
 # Tasks
 
   tasks:
-
-  - name: Enable GRUB quiet boot
+  - name: Configure GRUB
     tags: always
-    replace:
-      path: /etc/default/grub
-      regexp: '(^GRUB_CMDLINE_LINUX_DEFAULT=\").*(\")'
-      replace: '\g<1>quiet\g<2>'
-    register: grub_update
+    block:
+    - name: Enable GRUB quiet boot
+      tags: always
+      replace:
+        path: /etc/default/grub
+        regexp: '(^GRUB_CMDLINE_LINUX_DEFAULT=\").*(\")'
+        replace: '\g<1>quiet\g<2>'
+      register: grub_configure
 
-  - name: Reload GRUB
-    tags: always
-    command: update-grub
-    when: grub_update.changed == True
+    - name: Reload GRUB
+      tags: always
+      command: update-grub
+      register: grub_update
 
   - name: Disable hibernation and sleep
     tags: always
     command: systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+    register: sleep_disable
 
   - name: Disable unnecessary services
     tags: always
@@ -151,28 +167,35 @@
     - bluetooth
     - bolt
     - fwupd
+    register: services_disable
 
   - name: Domain join
     tags: domain
     shell: |
       echo "{{ domain_password }}" | realm join -U "{{ domain_user }}" "{{ domain_name }}"
       pam-auth-update --enable mkhomedir
+    register: domain_join
 
-  - name: Enable TKT rc4-hmac encryption for Ubuntu 18.04
+  - name: Enable rc4-hmac
     tags: domain
-    lineinfile:
-      path: /etc/krb5.conf
-      line: 'default_tkt_enctypes = rc4-hmac'
-      create: yes
-    when: ansible_distribution_version == "18.04"
+    block:
+    - name: Enable TKT rc4-hmac encryption for Ubuntu 18.04
+      tags: domain
+      lineinfile:
+        path: /etc/krb5.conf
+        line: 'default_tkt_enctypes = rc4-hmac'
+        create: yes
+      when: ansible_distribution_version == "18.04"
+      register: tkt_rc4_hmac_enable
 
-  - name: Enable TGS rc4-hmac encryption for Ubuntu 18.04
-    tags: domain
-    lineinfile:
-      path: /etc/krb5.conf
-      line: 'default_tgs_enctypes = rc4-hmac'
-      create: yes
-    when: ansible_distribution_version == "18.04"
+    - name: Enable TGS rc4-hmac encryption for Ubuntu 18.04
+      tags: domain
+      lineinfile:
+        path: /etc/krb5.conf
+        line: 'default_tgs_enctypes = rc4-hmac'
+        create: yes
+      when: ansible_distribution_version == "18.04"
+      register: tgs_rc4_hmac_enable
 
   - name: Install VHCI driver
     tags: horizon
@@ -180,37 +203,45 @@
       cd /tmp/vhci
       patch -p1 < /tmp/horizonagent/resources/vhci/patch/vhci.patch
       make clean && make && make install
+    register: vhci_install
 
   - name: Install V4L2Loopback driver
     tags: horizon
-    shell: |
-      cd /tmp/v4l2loopback
-      patch -p1 < /tmp/horizonagent/resources/v4l2loopback/v4l2loopback.patch
-      make clean && make && make install
-      make install-utils
-      depmod -A
+    block:
+    - name: Compile V4L2Loopback driver  
+      tags: horizon
+      shell: |
+        cd /tmp/v4l2loopback
+        patch -p1 < /tmp/horizonagent/resources/v4l2loopback/v4l2loopback.patch
+        make clean && make && make install
+        make install-utils
+        depmod -A
+      register: v4l2loopback_compile
 
-  - name: Override V4L2Loopback driver for Ubuntu 22.04 or 20.04
-    tags: horizon
-    lineinfile:
-      path: /etc/depmod.d/ubuntu.conf
-      line: override v4l2loopback * extra
-      create: yes    
-    when: ansible_distribution_version in ["22.04", "20.04"]
+    - name: Override V4L2Loopback driver for Ubuntu 22.04 or 20.04
+      tags: horizon
+      lineinfile:
+        path: /etc/depmod.d/ubuntu.conf
+        line: override v4l2loopback * extra
+        create: yes    
+      when: ansible_distribution_version in ["22.04", "20.04"]
+      register: v4l2loopback_override
 
-  - name: Regenerate modules.dep file
-    tags: horizon
-    shell: |
-      depmod -a
-      modprobe -r v4l2loopback
-      modprobe v4l2loopback
-    when: ansible_distribution_version in ["22.04", "20.04"]
+    - name: Regenerate modules.dep file
+      tags: horizon
+      shell: |
+        depmod -a
+        modprobe -r v4l2loopback
+        modprobe v4l2loopback
+      when: ansible_distribution_version in ["22.04", "20.04"]
+      register: modprobe_reload
 
   - name: Install Horizon Agent
     tags: horizon
     shell: |
       cd /tmp/horizonagent
       ./install_viewagent.sh -A yes -U yes -a yes --webcam
+    register: horizonagent_install
 
   - name: Enable Horizon offline domain join
     tags: horizon
@@ -218,27 +249,34 @@
       path: /etc/vmware/viewagent-custom.conf
       line: OfflineJoinDomain=sssd
       create: yes
+    register: offline_domain_join
 
-  - name: Set Horizon SSO user format to domain\username
+  - name: Enable SSO
     tags: horizon
-    lineinfile:
-      path: /etc/vmware/viewagent-custom.conf
-      line: 'SSOUserFormat=[domain]\\[username]'
-      create: yes
+    block:
+    - name: Set Horizon SSO user format to domain\username
+      tags: horizon
+      lineinfile:
+        path: /etc/vmware/viewagent-custom.conf
+        line: 'SSOUserFormat=[domain]\\[username]'
+        create: yes
+      register: horizon_sso_format
 
-  - name: Enable SSO with Horizon
-    tags: horizon
-    lineinfile:
-      path: /etc/sssd/sssd.conf
-      line: 'ad_gpo_map_interactive = +gdm-vmwcred'
-      create: yes
+    - name: Enable SSO with Horizon
+      tags: horizon
+      lineinfile:
+        path: /etc/sssd/sssd.conf
+        line: 'ad_gpo_map_interactive = +gdm-vmwcred'
+        create: yes
+      register: horizon_sso_enable
 
-  - name: Deactivate GPO access control in the cloned VM
-    tags: horizon
-    lineinfile:
-      path: /etc/sssd/sssd.conf
-      line: 'ad_gpo_access_control = permissive'
-      create: yes
+    - name: Deactivate GPO access control in the cloned VM
+      tags: horizon
+      lineinfile:
+        path: /etc/sssd/sssd.conf
+        line: 'ad_gpo_access_control = permissive'
+        create: yes
+      register: gpo_access_disable
 
   - name: Fix NSS and PAM services responder socker error during boot
     tags: domain
@@ -247,72 +285,122 @@
       state: absent
       regexp: '^services = nss, pam'
     when: ansible_distribution_version in ["22.04", "20.04"]
-
+    register: nss_fix
 
 # Post Tasks
 
   post_tasks:
 
-  - name: Disable automatic screen brightness, animation, and suspend
-    become: false
+  - name: Optimize GNOME
     tags: gnome
-    shell: |
-      gsettings set org.gnome.settings-daemon.plugins.power ambient-enabled false
-      gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
-      gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
-      gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'suspend'
-      gsettings set org.gnome.desktop.interface enable-animations 'false'
-    register: profile_update
+    block:
+    - name: Disable automatic screen brightness, animation, and suspend
+      become: false
+      tags: gnome
+      shell: |
+        gsettings set org.gnome.settings-daemon.plugins.power ambient-enabled false
+        gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'suspend'
+        gsettings set org.gnome.desktop.interface enable-animations 'false'
+      register: gnome_desktop_tweak
 
-  - name: Set desktop color and theme
-    become: false
-    tags: gnome
-    shell: |
-      gsettings set org.gnome.desktop.background picture-uri ''
-      gsettings set org.gnome.desktop.background primary-color '#0063B2'
-      gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-blue'      
-    register: profile_update
+    - name: Set desktop color and theme
+      become: false
+      tags: gnome
+      shell: |
+        gsettings set org.gnome.desktop.background picture-uri ''
+        gsettings set org.gnome.desktop.background primary-color '#0063B2'
+        gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-blue'      
+      register: desktop_back_update
 
-  - name: Create dconf directory to copy GNOME config 
-    tags: gnome
-    file:
-      path: /etc/skel/.config/dconf
-      state: directory
-      mode: '0700'
-    when: profile_update.changed == True
+    - name: Create dconf directory to copy GNOME config 
+      tags: gnome
+      file:
+        path: /etc/skel/.config/dconf
+        state: directory
+        mode: '0700'
+      register: gnome_dconf_create
 
-  - name: Copy GNOME config
-    tags: gnome
-    command: cp /home/{{ ansible_user }}/.config/dconf/user /etc/skel/.config/dconf/user
-    when: profile_update.changed == True
+    - name: Copy GNOME config
+      tags: gnome
+      command: cp /home/{{ ansible_user }}/.config/dconf/user /etc/skel/.config/dconf/user
+      register: gnome_config_copy
 
-  - name: Disable GNOME Welcome screen
-    tags: gnome
-    copy:
-      dest: /etc/skel/.config/gnome-initial-setup-done
-      mode: '0664'
-      content: |
-        yes
-    when: profile_update.changed == True
+    - name: Disable GNOME Welcome screen
+      tags: gnome
+      copy:
+        dest: /etc/skel/.config/gnome-initial-setup-done
+        mode: '0664'
+        content: |
+          yes
+      register: gnome_ws_disable
 
-  - name: Clear bash history for superuser account
+  - name: Clean bash
     tags: always
-    shell: |
-      rm ~/.bash_history
-      echo 'history -c' >> ~/.bash_logout
-    args:
-      warn: false
+    block:
+    - name: Clean bash history for superuser account
+      tags: always
+      shell: |
+        rm ~/.bash_history
+        echo 'history -c' >> ~/.bash_logout
+      args:
+        warn: false
+      register: root_bash_clean
 
-  - name: Clear bash history for user account
-    become: false
-    tags: always
-    shell: |
-      rm ~/.bash_history
-      echo 'history -c' >> ~/.bash_logout
-    args:
-      warn: false
+    - name: Clean bash history for user account
+      become: false
+      tags: always
+      shell: |
+        rm ~/.bash_history
+        echo 'history -c' >> ~/.bash_logout
+      args:
+        warn: false
+      register: user_bash_clean
 
   - name: Reboot the host
     tags: reboot
     reboot:
       reboot_timeout: 300
+
+# Debug section, set debug variable to True to display output from ansible modules
+  - name: "Debug"
+    debug: msg="item.stdout_lines"
+    when: item.stdout_lines is defined and debug
+    loop:
+    - "{{ apt_remove }}"
+    - "{{ apt_update }}"
+    - "{{ snap_refresh }}"
+    - "{{ tools_install }}"
+    - "{{ apt_install }}"
+    - "{{ update_disable }}"
+    - "{{ apt_domjoin_install }}"
+    - "{{ horizonagent_copy }}"
+    - "{{ vhci_copy }}"
+    - "{{ v4l2loopback_copy }}"
+    - "{{ gcc_install }}"
+    - "{{ horizonagent_prereq_install }}"
+    - "{{ grub_configure }}"
+    - "{{ grub_update }}"
+    - "{{ sleep_disable }}"
+    - "{{ services_disable }}"
+    - "{{ domain_join }}"
+    - "{{ tkt_rc4_hmac_enable }}"
+    - "{{ tgs_rc4_hmac_enable }}"
+    - "{{ vhci_install }}"
+    - "{{ v4l2loopback_compile }}"
+    - "{{ v4l2loopback_override }}"
+    - "{{ modprobe_reload }}"
+    - "{{ horizonagent_install }}"
+    - "{{ offline_domain_join }}"
+    - "{{ horizon_sso_format }}"
+    - "{{ horizon_sso_enable }}"
+    - "{{ gpo_access_disable }}"
+    - "{{ nss_fix }}"
+    - "{{ gnome_desktop_tweak }}"
+    - "{{ desktop_back_update }}"
+    - "{{ gnome_dconf_create }}"
+    - "{{ gnome_config_copy }}"
+    - "{{ gnome_ws_disable }}"
+    - "{{ root_bash_clean }}"
+    - "{{ user_bash_clean }}"
