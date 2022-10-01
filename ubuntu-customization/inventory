@@ -20,4 +20,5 @@ domain_user=administrator
 # User password for domain join
 domain_password=P@ssw0rd
 
+# Set to True to enable tasks commands verbose output
 debug = False
