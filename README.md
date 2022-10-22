@@ -44,6 +44,9 @@ ssh-copy-id -i ~/id_rsa.pub user@virtual_desktop_ip_address
 ```
 ansible-playbook --ask-become-pass optimize.yml
 ```
+
+Tags
+====
 If you want to run only certain optimization you can run ansible-playbook with `--tags "tag1, tag2, tag3"` parameter. Currently this playbook supports tags:
 - horizon - install and configure VMware Horizon Agent on the virtual desktop.
 - domain - join to the domain with the parameters specified in inventory files.
@@ -53,3 +56,13 @@ For example to run playbook with horizon and domain join optimization only enter
 ```
 ansible-playbook --ask-become-pass --tags "horizon, domain" optimize.yml
 ```
+Variables
+=========
+Inventory file contains variables, which are necessary to run the playbook:
+- horizon_agent - archive name with the horizon_agent installation package
+- vhci_driver - vhci driver archive name
+- v4l2loopback_driver - archive name with the v4l2loopback driver
+- domain_name - domain name to join
+- domain_user - domain account name to join to the domain
+- domain_password - password for domain-entry account
+- debug - set to True to display extended information from the commands that have been executed
