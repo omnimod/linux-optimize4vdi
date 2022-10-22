@@ -1,5 +1,5 @@
 # linux-optimize4vdi
-Linux-optimize4vdi is a simple Ansible playbook which performs basic configuration steps like updating OS, uninstalling/installing packages, setting GNOME desktop parameters, etc. Current version supports Ubuntu 22.04.
+Linux-optimize4vdi is a simple Ansible playbook which performs basic configuration steps like updating OS, uninstalling/installing packages, setting GNOME desktop parameters, etc. Ubuntu 22.04 /20.04 / 18.04 are supported.
 
 Automated features
 ==================
@@ -24,7 +24,7 @@ This playbook performs multiple optimizations:
 
 How to use
 ==========
-1. Install Ubuntu 22.04 Guest OS on the virtual desktop VM with default parameters. Set the default user account with 'user' as username and sudoer permissions. If you user another username, please modify configuration steps and ansible.cfg accordingly.
+1. Install Ubuntu 22.04/20.04/18.04 Guest OS on a virtual desktop VM with default parameters. Set the default user account with 'user' as username and sudoer permissions. If you use another username, please update ansible.cfg accordingly.
 2. Install OpenSSH server on the virtual desktop:
 ```
 sudo apt get install openssh-server
@@ -38,8 +38,8 @@ ssh-keygen
 ```
 ssh-copy-id -i ~/id_rsa.pub user@virtual_desktop_ip_address
 ```
-6. Modify inventory file and specify virtual desktop IP address and modify required variables.
-7. Download and place required installation packages and archives to the files folder.
+6. Modify inventory file and specify virtual desktop IP address, modify required variables if needed.
+7. Download and place required installation packages and archives to the /files folder.
 8. Run Ansible playbook with:
 ```
 ansible-playbook --ask-become-pass optimize.yml
