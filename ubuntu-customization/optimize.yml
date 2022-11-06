@@ -1,5 +1,3 @@
----
-
 - hosts: all
   become: true
 
@@ -35,12 +33,12 @@
     register: snap_refresh
 
   - name: Install Open-VM-Tools
-    hosts: horizon
     tags: vsphere
     apt:
       state: latest
       pkg:
       - open-vm-tools-desktop
+    when: vdi_broker == "horizon"
     register: tools_install
 
   - name: Install new apps
@@ -83,7 +81,6 @@
     register: apt_domjoin_install
 
   - name: Copy Horizon Agent installer
-    hosts: horizon
     tags: horizon
     unarchive:
       src: '{{ horizon_agent }}'
@@ -91,10 +88,10 @@
       extra_opts:
       - --one-top-level=horizonagent
       - --strip-components=1
+    when: vdi_broker == "horizon"
     register: horizonagent_copy
 
   - name: Copy VHCI Driver for USB redirection
-    hosts: horizon
     tags: horizon
     unarchive:
       src: '{{ vhci_driver }}'
@@ -102,10 +99,10 @@
       extra_opts:
       - --one-top-level=vhci
       - --strip-components=1
+    when: vdi_broker == "horizon"
     register: vhci_copy
 
   - name: Copy V4L2Loopback Driver for RTAV
-    hosts: horizon
     tags: horizon
     unarchive:
       src: '{{ v4l2loopback_driver }}'
@@ -113,10 +110,10 @@
       extra_opts:
       - --one-top-level=v4l2loopback
       - --strip-components=1
+    when: vdi_broker == "horizon"
     register: v4l2loopback_copy
 
   - name: Install make, gcc, libelf-dev, linux-headers
-    hosts: horizon
     tags: horizon
     apt:
       name:
@@ -125,17 +122,17 @@
       - libelf-dev
       - linux-headers-{{ ansible_kernel }}
       state: latest 
+    when: vdi_broker == "horizon"
     register: gcc_install
 
   - name: Install Horizon Agent pre-requirements for Ubuntu 18.04
-    hosts: horizon
     tags: horizon
     apt:
       name:
       - python
       - python-dbus
       - python-gobject
-    when: ansible_distribution_version == "18.04"
+    when: ansible_distribution_version == "18.04" and vdi_broker == "horizon"
     register: horizonagent_prereq_install
 
 # Tasks
@@ -201,16 +198,16 @@
       register: tgs_rc4_hmac_enable
 
   - name: Install VHCI driver
-    hosts: horizon
     tags: horizon
     shell: |
       cd /tmp/vhci
       patch -p1 < /tmp/horizonagent/resources/vhci/patch/vhci.patch
       make clean && make && make install
+    when: vdi_broker == "horizon"
     register: vhci_install
 
   - name: Install V4L2Loopback driver
-    hosts: horizon
+    when: vdi_broker == "horizon"
     tags: horizon
     block:
     - name: Compile V4L2Loopback driver  
@@ -239,24 +236,24 @@
       register: modprobe_reload
 
   - name: Install Horizon Agent
-    hosts: horizon
     tags: horizon
     shell: |
       cd /tmp/horizonagent
       ./install_viewagent.sh -A yes -U yes -a yes --webcam
+    when: vdi_broker == "horizon"
     register: horizonagent_install
 
   - name: Enable Horizon offline domain join
-    hosts: horizon
     tags: horizon
     lineinfile:
       path: /etc/vmware/viewagent-custom.conf
       line: OfflineJoinDomain=sssd
       create: yes
+    when: vdi_broker == "horizon"
     register: offline_domain_join
 
   - name: Enable SSO
-    hosts: horizon
+    when: vdi_broker == "horizon"
     tags: horizon
     block:
     - name: Set Horizon SSO user format to domain\username
