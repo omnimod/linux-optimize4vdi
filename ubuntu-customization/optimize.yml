@@ -1,3 +1,5 @@
+---
+
 - hosts: all
   become: true
 
@@ -38,7 +40,6 @@
       state: latest
       pkg:
       - open-vm-tools-desktop
-    when: vdi_broker == "horizon"
     register: tools_install
 
   - name: Install new apps
@@ -62,6 +63,7 @@
         replace: '\g<1>0\g<2>'
 
     - name: Disable unattended upgrades
+      tags: always
       replace:
         path: /etc/apt/apt.conf.d/20auto-upgrades
         regexp: '(^APT::Periodic::Unattended-Upgrade \")1(\")'
@@ -88,7 +90,6 @@
       extra_opts:
       - --one-top-level=horizonagent
       - --strip-components=1
-    when: vdi_broker == "horizon"
     register: horizonagent_copy
 
   - name: Copy VHCI Driver for USB redirection
@@ -99,7 +100,6 @@
       extra_opts:
       - --one-top-level=vhci
       - --strip-components=1
-    when: vdi_broker == "horizon"
     register: vhci_copy
 
   - name: Copy V4L2Loopback Driver for RTAV
@@ -110,7 +110,6 @@
       extra_opts:
       - --one-top-level=v4l2loopback
       - --strip-components=1
-    when: vdi_broker == "horizon"
     register: v4l2loopback_copy
 
   - name: Install make, gcc, libelf-dev, linux-headers
@@ -122,7 +121,6 @@
       - libelf-dev
       - linux-headers-{{ ansible_kernel }}
       state: latest 
-    when: vdi_broker == "horizon"
     register: gcc_install
 
   - name: Install Horizon Agent pre-requirements for Ubuntu 18.04
@@ -132,7 +130,7 @@
       - python
       - python-dbus
       - python-gobject
-    when: ansible_distribution_version == "18.04" and vdi_broker == "horizon"
+    when: ansible_distribution_version == "18.04"
     register: horizonagent_prereq_install
 
 # Tasks
@@ -142,6 +140,7 @@
     tags: always
     block:
     - name: Enable GRUB quiet boot
+      tags: always
       replace:
         path: /etc/default/grub
         regexp: '(^GRUB_CMDLINE_LINUX_DEFAULT=\").*(\")'
@@ -149,6 +148,7 @@
       register: grub_configure
 
     - name: Reload GRUB
+      tags: always
       command: update-grub
       register: grub_update
 
@@ -203,14 +203,13 @@
       cd /tmp/vhci
       patch -p1 < /tmp/horizonagent/resources/vhci/patch/vhci.patch
       make clean && make && make install
-    when: vdi_broker == "horizon"
     register: vhci_install
 
   - name: Install V4L2Loopback driver
-    when: vdi_broker == "horizon"
     tags: horizon
     block:
     - name: Compile V4L2Loopback driver  
+      tags: horizon
       shell: |
         cd /tmp/v4l2loopback
         patch -p1 < /tmp/horizonagent/resources/v4l2loopback/v4l2loopback.patch
@@ -220,6 +219,7 @@
       register: v4l2loopback_compile
 
     - name: Override V4L2Loopback driver for Ubuntu 22.04 or 20.04
+      tags: horizon
       lineinfile:
         path: /etc/depmod.d/ubuntu.conf
         line: override v4l2loopback * extra
@@ -228,6 +228,7 @@
       register: v4l2loopback_override
 
     - name: Regenerate modules.dep file
+      tags: horizon
       shell: |
         depmod -a
         modprobe -r v4l2loopback
@@ -240,7 +241,6 @@
     shell: |
       cd /tmp/horizonagent
       ./install_viewagent.sh -A yes -U yes -a yes --webcam
-    when: vdi_broker == "horizon"
     register: horizonagent_install
 
   - name: Enable Horizon offline domain join
@@ -249,14 +249,13 @@
       path: /etc/vmware/viewagent-custom.conf
       line: OfflineJoinDomain=sssd
       create: yes
-    when: vdi_broker == "horizon"
     register: offline_domain_join
 
   - name: Enable SSO
-    when: vdi_broker == "horizon"
     tags: horizon
     block:
     - name: Set Horizon SSO user format to domain\username
+      tags: horizon
       lineinfile:
         path: /etc/vmware/viewagent-custom.conf
         line: 'SSOUserFormat=[domain]\\[username]'
@@ -264,6 +263,7 @@
       register: horizon_sso_format
 
     - name: Enable SSO with Horizon
+      tags: horizon
       lineinfile:
         path: /etc/sssd/sssd.conf
         line: 'ad_gpo_map_interactive = +gdm-vmwcred'
@@ -271,6 +271,7 @@
       register: horizon_sso_enable
 
     - name: Deactivate GPO access control in the cloned VM
+      tags: horizon
       lineinfile:
         path: /etc/sssd/sssd.conf
         line: 'ad_gpo_access_control = permissive'
@@ -295,6 +296,7 @@
     block:
     - name: Disable automatic screen brightness, animation, and suspend
       become: false
+      tags: gnome
       shell: |
         gsettings set org.gnome.settings-daemon.plugins.power ambient-enabled false
         gsettings set org.gnome.settings-daemon.plugins.power idle-dim false
@@ -305,6 +307,7 @@
 
     - name: Set desktop color and theme
       become: false
+      tags: gnome
       shell: |
         gsettings set org.gnome.desktop.background picture-uri ''
         gsettings set org.gnome.desktop.background primary-color '#0063B2'
@@ -312,6 +315,7 @@
       register: desktop_back_update
 
     - name: Create dconf directory to copy GNOME config 
+      tags: gnome
       file:
         path: /etc/skel/.config/dconf
         state: directory
@@ -319,10 +323,12 @@
       register: gnome_dconf_create
 
     - name: Copy GNOME config
+      tags: gnome
       command: cp /home/{{ ansible_user }}/.config/dconf/user /etc/skel/.config/dconf/user
       register: gnome_config_copy
 
     - name: Disable GNOME Welcome screen
+      tags: gnome
       copy:
         dest: /etc/skel/.config/gnome-initial-setup-done
         mode: '0664'
@@ -334,6 +340,7 @@
     tags: always
     block:
     - name: Clean bash history for superuser account
+      tags: always
       shell: |
         rm ~/.bash_history
         echo 'history -c' >> ~/.bash_logout
@@ -343,6 +350,7 @@
 
     - name: Clean bash history for user account
       become: false
+      tags: always
       shell: |
         rm ~/.bash_history
         echo 'history -c' >> ~/.bash_logout
