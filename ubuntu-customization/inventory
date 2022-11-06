@@ -2,6 +2,8 @@
 192.168.1.37
 
 [horizon:vars]
+vdi_broker=horizon
+
 # Horizon agent installer archive filename
 horizon_agent=VMware-horizonagent-linux-x86_64-2206-8.6.0-20072671.tar.gz 
 
